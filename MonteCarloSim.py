@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from SimulatorUnit import SimulatorUnit 
 from typing import List
 
@@ -7,13 +6,25 @@ from typing import List
 def initSim():
     print("Initializing simulation")
     #create simulator cube
-    newSim = SimulatorUnit([], 1000)
+    newSim = SimulatorUnit([], 250, 295.15)
     #populate cube with molecules
-    newSim.populateRandom(128, 342, 20)
+    newSim.populateSolid(1, 1, 256)
 
     for n,molecule in enumerate(newSim.molecules):
         print ("Molecule " + str(n) + " has coords: " + str(molecule.x) + " " + str(molecule.y) + " " + str(molecule.z))
 
-    print("molecules 0 to 4 have LJ potential: " + str(newSim.molecules[0].LJs[4]) + ", " + str(newSim.molecules[4].LJs[0]))
+    accepted = 0
+    notaccepted = 0
+    for i in range(1000):
+        stepAccepted = newSim.MonteCarloStep()
+        if stepAccepted:
+            accepted += 1
+        else:
+            notaccepted += 1
+    print("Acceptance rate: " + str(accepted/(accepted+notaccepted)))
+    for n,molecule in enumerate(newSim.molecules):
+         print ("Molecule " + str(n) + " has coords: " + str(molecule.x) + " " + str(molecule.y) + " " + str(molecule.z))
+
+    # print("distance between molecule 1 and 5: " + str(newSim.distance(newSim.molecules[1], newSim.molecules[5])))
 
 initSim()
