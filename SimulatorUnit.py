@@ -3,6 +3,7 @@ from Molecule import Molecule
 import numpy as np
 import random
 import math
+import statistics
 
 
 
@@ -12,8 +13,12 @@ class SimulatorUnit:
         self.molecules = molecules
         self.L = L
         self.T=T
-        kB = 1.380649*10**-23
+        kB = 1.38064852e-23
         self.beta = 1/(kB*T)
+        self.potEnergies = []
+
+    def getMolecules(self):
+        return self.molecules
 
     def MonteCarloStep(self):
         accepted = False
@@ -23,28 +28,29 @@ class SimulatorUnit:
         moleculeStateCandidate = self.molecules
         #get current potential energy
         oldPotentialEnergy = self.PotentialEnergy(moleculeStateCandidate)
+        self.potEnergies.append(oldPotentialEnergy)
         #randomly move molecule
-        movementSize = 100
+        movementSize = 10
         moleculeStateCandidate[moleculeIndex].x += random.uniform(-movementSize,movementSize)
         if (moleculeStateCandidate[moleculeIndex].x > self.L):
             moleculeStateCandidate[moleculeIndex].x = moleculeStateCandidate[moleculeIndex].x-self.L
         if (moleculeStateCandidate[moleculeIndex].x < 0):
-            moleculeStateCandidate[moleculeIndex].x = moleculeStateCandidate[moleculeIndex].x+self.L
+            moleculeStateCandidate[moleculeIndex].x = self.L + moleculeStateCandidate[moleculeIndex].x
         moleculeStateCandidate[moleculeIndex].y += random.uniform(-movementSize,movementSize)
         if (moleculeStateCandidate[moleculeIndex].y > self.L):
             moleculeStateCandidate[moleculeIndex].y = moleculeStateCandidate[moleculeIndex].y-self.L
         if (moleculeStateCandidate[moleculeIndex].y < 0):
-            moleculeStateCandidate[moleculeIndex].y = moleculeStateCandidate[moleculeIndex].y+self.L
+            moleculeStateCandidate[moleculeIndex].y = self.L + moleculeStateCandidate[moleculeIndex].y
         moleculeStateCandidate[moleculeIndex].z += random.uniform(-movementSize,movementSize)
         if (moleculeStateCandidate[moleculeIndex].z > self.L):
             moleculeStateCandidate[moleculeIndex].z = moleculeStateCandidate[moleculeIndex].z-self.L
         if (moleculeStateCandidate[moleculeIndex].z < 0):
-            moleculeStateCandidate[moleculeIndex].z = moleculeStateCandidate[moleculeIndex].z+self.L
+            moleculeStateCandidate[moleculeIndex].z = self.L + moleculeStateCandidate[moleculeIndex].z
         #get new potential energy
-        self.recalculateMolecule(moleculeIndex)
+        self.recalculateMolecule(moleculeIndex, moleculeStateCandidate)
         newPotentialEnergy = self.PotentialEnergy(moleculeStateCandidate)
         #if new potential energy is lower, accept move
-        if newPotentialEnergy < oldPotentialEnergy:
+        if newPotentialEnergy <= oldPotentialEnergy:
             self.molecules = moleculeStateCandidate
             accepted = True
         #if new potential energy is higher, accept move with probability e^(-beta*(new-old))
@@ -57,16 +63,27 @@ class SimulatorUnit:
         
 
     ##recalculate molecule relationships after a move
-    def recalculateMolecule(self, moleculeIndex: int):
-        for i in range(len(self.molecules)):
+    def recalculateMolecule(self, moleculeIndex: int, moleculeList: List[Molecule]):
+        for i in range(len(moleculeList)):
             if i != moleculeIndex:
-                dist=self.distance(self.molecules[i], self.molecules[moleculeIndex])
-                LJcalc = self.LJ(dist, self.molecules[i].epsilon, self.molecules[i].r0)
-                self.molecules[moleculeIndex].LJs[i] = LJcalc
-                self.molecules[i].LJs[moleculeIndex] = LJcalc
-        
+                dist=self.distance(moleculeList[i], moleculeList[moleculeIndex])
+                LJcalc = self.LJ(dist)
+                moleculeList[moleculeIndex].LJs[i] = LJcalc
+                moleculeList[i].LJs[moleculeIndex] = LJcalc
 
-
+    def AvgPotentialEnergy(self, moleculeList: List[Molecule]):
+        return self.PotentialEnergy(moleculeList)/len(moleculeList)
+    
+    def stdDevPotentialEnergy(self, moleculeList: List[Molecule]):
+        PEs =[]
+        for molecule in moleculeList:
+            moleculePE = 0
+            for LJval in molecule.LJs:
+                if LJval != None:
+                    moleculePE += LJval
+            PEs.append(moleculePE)
+        return statistics.stdev(PEs)
+    
     #Calculating potential energy of system
     def PotentialEnergy(self, moleculeList: List[Molecule]):
         potentialEnergy = 0
@@ -76,12 +93,12 @@ class SimulatorUnit:
         return potentialEnergy
 
     #calculating LJ potential between two molecules based on distance
-    def LJ(self, r: float, epsilon:float=1, r0:float=1):
-        attraction = self.AttractionComponent(r, r0)
-        return 4*epsilon*(self.RepulsionComponent(attraction)-attraction)
+    def LJ(self, r: float):
+        attraction = self.AttractionComponent(r)
+        return 4*(self.RepulsionComponent(attraction)-attraction)
 
-    def AttractionComponent(self, r: float, r0:float):
-        return (r0/r)**6
+    def AttractionComponent(self, r: float):
+        return (1/r)**-6
 
     def RepulsionComponent(self, attractionComponent:float):
         return attractionComponent**2
@@ -133,37 +150,45 @@ class SimulatorUnit:
         for i in range(N):
             for j in range(i+1, N): #for each relationship, calculate LJ potential and store it in both molecules' lists, with index corresponding to the other molecule
                 dist=self.distance(self.molecules[i], self.molecules[j])
-                LJcalc = self.LJ(dist, self.molecules[i].epsilon, self.molecules[i].r0)
+                LJcalc = self.LJ(dist)
                 self.molecules[j].LJs[i] = LJcalc
                 self.molecules[i].LJs[j] = LJcalc
 
     ##maths on this is wrong, placeholder
-    def populateSolid(self, epsilon, r0, N: int):
-        rSigma = 0.77
-        aSigma = rSigma*2
-        for i in range(math.floor(N/4)):
-            x1 = 0 + (aSigma*i)
-            y1 = rSigma + (aSigma*i)
-            z1 = rSigma + (aSigma*i)
-            x2 = rSigma + (aSigma*i)
-            y2 = 0 + (aSigma*i)
-            z2 = rSigma+ (aSigma*i)
-            x3 = 0+ (aSigma*i)
-            y3 = 0+ (aSigma*i)
-            z3 = 0+ (aSigma*i)
-            x4 = rSigma+ (aSigma*i)
-            y4 = rSigma+ (aSigma*i)
-            z4 = 0+ (aSigma*i)
-            self.molecules.append(Molecule(x1, y1, z1, r0, epsilon, [None]*N))
-            self.molecules.append(Molecule(x2, y2, z2, r0, epsilon, [None]*N))
-            self.molecules.append(Molecule(x3, y3, z3, r0, epsilon, [None]*N))
-            self.molecules.append(Molecule(x4, y4, z4, r0, epsilon, [None]*N))
+    def populateSolid(self, epsilon, r0, N, offset=0):
+        r_sig = 0.77
+        a_sig = r_sig*2
+        iterNo = math.floor(N/4)
+        cube_root = math.ceil(iterNo**(1./3))
+        for x in range(cube_root):
+            for y in range(cube_root):
+                for z in range(cube_root):
+                    x1 = 0 + (a_sig*x) + offset
+                    y1 = r_sig + (a_sig*y)+ offset
+                    z1 = r_sig + (a_sig*z)+ offset
+
+                    x2 = r_sig + (a_sig*x)+ offset
+                    y2 = 0 + (a_sig*y)+ offset
+                    z2 = r_sig+ (a_sig*z)+ offset
+
+                    x3 = 0+ (a_sig*x)+ offset
+                    y3 = 0+ (a_sig*y)+ offset
+                    z3 = 0+ (a_sig*z)+ offset
+
+                    x4 = r_sig+ (a_sig*x)+ offset
+                    y4 = r_sig+ (a_sig*y)+ offset
+                    z4 = 0+ (a_sig*z)+ offset
+
+                    self.molecules.append(Molecule(x1, y1, z1, r0, epsilon, [None]*N))
+                    self.molecules.append(Molecule(x2, y2, z2, r0, epsilon, [None]*N))
+                    self.molecules.append(Molecule(x3, y3, z3, r0, epsilon, [None]*N))
+                    self.molecules.append(Molecule(x4, y4, z4, r0, epsilon, [None]*N))
         
         #iterate through every molecule relationship (just combinations, not permutations, so no duplicates)
         for i in range(N):
             for j in range(i+1, N): #for each relationship, calculate LJ potential and store it in both molecules' lists, with index corresponding to the other molecule
                 dist=self.distance(self.molecules[i], self.molecules[j])
-                LJcalc = self.LJ(dist, self.molecules[i].epsilon, self.molecules[i].r0)
+                LJcalc = self.LJ(dist)
                 self.molecules[j].LJs[i] = LJcalc
                 self.molecules[i].LJs[j] = LJcalc
 
