@@ -4,7 +4,7 @@ import numpy as np
 import random
 import math
 import statistics
-
+import rdfpy
 
 
 class SimulatorUnit:
@@ -13,10 +13,12 @@ class SimulatorUnit:
         self.molecules = molecules
         self.L = L
         self.T=T
-        kB = 1.38064852e-23
-        self.beta = 1/(kB*T)
+        self.kB = 1.38064852e-23/128000 #boltzmann constant in epsilon units
         self.potEnergies = []
 
+    def getMoleculeCoors(self):
+        return [[molecule.x, molecule.y, molecule.z] for molecule in self.molecules]
+    
     def getMolecules(self):
         return self.molecules
 
@@ -30,7 +32,7 @@ class SimulatorUnit:
         oldPotentialEnergy = self.PotentialEnergy(moleculeStateCandidate)
         self.potEnergies.append(oldPotentialEnergy)
         #randomly move molecule
-        movementSize = 10
+        movementSize = self.T/25
         moleculeStateCandidate[moleculeIndex].x += random.uniform(-movementSize,movementSize)
         if (moleculeStateCandidate[moleculeIndex].x > self.L):
             moleculeStateCandidate[moleculeIndex].x = moleculeStateCandidate[moleculeIndex].x-self.L
@@ -55,7 +57,9 @@ class SimulatorUnit:
             accepted = True
         #if new potential energy is higher, accept move with probability e^(-beta*(new-old))
         else:
-            probablity = min(1, math.exp(-(self.beta)*(newPotentialEnergy-oldPotentialEnergy)))
+            
+            probablity = min(1, math.exp(-((newPotentialEnergy-oldPotentialEnergy)/self.kB*self.T)))
+            print(-((newPotentialEnergy-oldPotentialEnergy)/self.kB*self.T))
             if random.uniform(0,1) < probablity:
                 self.molecules = moleculeStateCandidate
                 accepted = True
@@ -66,10 +70,12 @@ class SimulatorUnit:
     def recalculateMolecule(self, moleculeIndex: int, moleculeList: List[Molecule]):
         for i in range(len(moleculeList)):
             if i != moleculeIndex:
-                dist=self.distance(moleculeList[i], moleculeList[moleculeIndex])
+                dist=self.distance(moleculeList[moleculeIndex], moleculeList[i])
                 LJcalc = self.LJ(dist)
                 moleculeList[moleculeIndex].LJs[i] = LJcalc
                 moleculeList[i].LJs[moleculeIndex] = LJcalc
+            else:
+                moleculeList[moleculeIndex].LJs[i] = 0
 
     def AvgPotentialEnergy(self, moleculeList: List[Molecule]):
         return self.PotentialEnergy(moleculeList)/len(moleculeList)
@@ -94,14 +100,13 @@ class SimulatorUnit:
 
     #calculating LJ potential between two molecules based on distance
     def LJ(self, r: float):
-        attraction = self.AttractionComponent(r)
-        return 4*(self.RepulsionComponent(attraction)-attraction)
+        return 4*(self.RepulsionComponent(r)-self.AttractionComponent(r))
 
     def AttractionComponent(self, r: float):
-        return (1/r)**-6
+        return (1/r)**6
 
-    def RepulsionComponent(self, attractionComponent:float):
-        return attractionComponent**2
+    def RepulsionComponent(self, r:float):
+        return (1/r)**12
 
     def distance(self, molecule1: Molecule, molecule2: Molecule): #minimum image convention
         x1 = molecule1.x
