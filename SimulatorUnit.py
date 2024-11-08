@@ -17,7 +17,9 @@ class SimulatorUnit:
         self.potEnergies = []
 
     def getMoleculeCoors(self):
-        return [[molecule.x, molecule.y, molecule.z] for molecule in self.molecules]
+        particleCoords = [[molecule.x, molecule.y, molecule.z] for molecule in self.molecules]
+        #print (particleCoords)
+        return particleCoords
     
     def getMolecules(self):
         return self.molecules
@@ -32,7 +34,7 @@ class SimulatorUnit:
         oldPotentialEnergy = self.PotentialEnergy(moleculeStateCandidate)
         self.potEnergies.append(oldPotentialEnergy)
         #randomly move molecule
-        movementSize = self.T/25
+        movementSize = 0.1+ self.T/25
         moleculeStateCandidate[moleculeIndex].x += random.uniform(-movementSize,movementSize)
         if (moleculeStateCandidate[moleculeIndex].x > self.L):
             moleculeStateCandidate[moleculeIndex].x = moleculeStateCandidate[moleculeIndex].x-self.L
@@ -59,10 +61,10 @@ class SimulatorUnit:
         else:
             
             probablity = min(1, math.exp(-((newPotentialEnergy-oldPotentialEnergy)/self.kB*self.T)))
-            print(-((newPotentialEnergy-oldPotentialEnergy)/self.kB*self.T))
             if random.uniform(0,1) < probablity:
                 self.molecules = moleculeStateCandidate
                 accepted = True
+        print(self.distance(self.molecules[0], self.molecules[1]))   
         return accepted
         
 
@@ -93,8 +95,10 @@ class SimulatorUnit:
     #Calculating potential energy of system
     def PotentialEnergy(self, moleculeList: List[Molecule]):
         potentialEnergy = 0
+        
         for i in range(len(moleculeList)):
             for j in range(i+1, len(moleculeList)):
+                #print(i,j, moleculeList[i].LJs[j])
                 potentialEnergy += moleculeList[i].LJs[j]
         return potentialEnergy
 
@@ -107,7 +111,7 @@ class SimulatorUnit:
 
     def RepulsionComponent(self, r:float):
         return (1/r)**12
-
+#def distance (x1,y1,z1,x2,y2,z2,L)
     def distance(self, molecule1: Molecule, molecule2: Molecule): #minimum image convention
         x1 = molecule1.x
         y1 = molecule1.y
@@ -188,6 +192,29 @@ class SimulatorUnit:
                     self.molecules.append(Molecule(x2, y2, z2, r0, epsilon, [None]*N))
                     self.molecules.append(Molecule(x3, y3, z3, r0, epsilon, [None]*N))
                     self.molecules.append(Molecule(x4, y4, z4, r0, epsilon, [None]*N))
+        
+        #iterate through every molecule relationship (just combinations, not permutations, so no duplicates)
+        for i in range(N):
+            for j in range(i+1, N): #for each relationship, calculate LJ potential and store it in both molecules' lists, with index corresponding to the other molecule
+                dist=self.distance(self.molecules[i], self.molecules[j])
+                LJcalc = self.LJ(dist)
+                self.molecules[j].LJs[i] = LJcalc
+                self.molecules[i].LJs[j] = LJcalc
+
+    def populateArbitrary(self, epsilon, r0, N, offset=0):
+        r_sig = 0.77
+
+        x1 = 0 + offset
+        y1 = 0 + offset
+        z1 = 0 + offset
+
+        x2 = r_sig*3+ offset
+        y2 = r_sig*2+ offset
+        z2 = r_sig*2+ offset
+
+        self.molecules.append(Molecule(x1, y1, z1, r0, epsilon, [None]*N))
+        self.molecules.append(Molecule(x2, y2, z2, r0, epsilon, [None]*N))
+
         
         #iterate through every molecule relationship (just combinations, not permutations, so no duplicates)
         for i in range(N):
